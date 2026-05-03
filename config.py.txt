@@ -1,0 +1,16 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Vector index path
+VECTOR_INDEX_PATH = os.getenv("VECTOR_INDEX_PATH", "data/vector_index.faiss")
+METADATA_PATH = os.getenv("METADATA_PATH", "data/chunks_metadata.csv")
+
+# Model names / API keys
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "gpt-4.1-mini")  # Example; change as needed
+
+TOP_K = int(os.getenv("TOP_K", 5))

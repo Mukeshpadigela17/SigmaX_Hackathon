@@ -1,0 +1,35 @@
+import os
+import pandas as pd
+from sentence_transformers import SentenceTransformer
+import faiss
+from tqdm import tqdm
+
+from .config import VECTOR_INDEX_PATH, METADATA_PATH, EMBEDDING_MODEL_NAME
+
+def build_index_from_csv(standards_csv_path: str):
+    """
+    Assumes a CSV with columns: id, title, text, category (e.g., Cement/Steel/etc.)
+    You should generate this CSV from the BIS SP 21 PDFs separately.
+    """
+    df = pd.read_csv(standards_csv_path)
+    df = df.dropna(subset=["text"])
+
+    model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+
+    embeddings = []
+    for text in tqdm(df["text"].tolist(), desc="Encoding chunks"):
+        emb = model.encode(text, convert_to_numpy=True, show_progress_bar=False)
+        embeddings.append(emb)
+
+    import numpy as np
+    embeddings = np.vstack(embeddings).astype("float32")
+
+    index = faiss.IndexFlatIP(embeddings.shape[1])
+    faiss.normalize_L2(embeddings)
+    index.add(embeddings)
+
+    os.makedirs(os.path.dirname(VECTOR_INDEX_PATH), exist_ok=True)
+    faiss.write_index(index, VECTOR_INDEX_PATH)
+
+    df.to_csv(METADATA_PATH, index=False)
+    print(f"Saved index to {VECTOR_INDEX_PATH} and metadata to {METADATA_PATH}")

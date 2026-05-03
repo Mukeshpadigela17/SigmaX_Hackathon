@@ -1,0 +1,78 @@
+import time
+from typing import List, Dict
+
+from .retriever import StandardsRetriever
+from .config import OPENAI_API_KEY, LLM_MODEL_NAME, TOP_K
+
+import openai
+
+class RAGPipeline:
+    def __init__(self):
+        self.retriever = StandardsRetriever()
+        if OPENAI_API_KEY:
+            openai.api_key = OPENAI_API_KEY
+
+    def call_llm(self, query: str, retrieved_chunks: List[Dict]) -> str:
+        """
+        Simple LLM call that uses retrieved chunks as context.
+        Replace with your preferred provider/SDK.
+        """
+        if not OPENAI_API_KEY:
+            # Fallback: naive template without external LLM (for offline dev)
+            standards_list = [f"- {c['title']} (ID: {c['id']})" for c in retrieved_chunks]
+            joined = "\n".join(standards_list)
+            return (
+                "Recommended standards based on simple retrieval (no LLM key configured):\n"
+                f"{joined}"
+            )
+
+        context_parts = []
+        for c in retrieved_chunks:
+            context_parts.append(f"ID: {c['id']}\nTitle: {c['title']}\nText: {c['text'][:500]}...")
+        context = "\n\n".join(context_parts)
+
+        system_prompt = (
+            "You are an assistant that recommends BIS building material standards.\n"
+            "You must only use the given context chunks, and never invent new standards.\n"
+            "For each query, recommend 3–5 standards and provide a 1–2 sentence rationale for each."
+        )
+
+        user_prompt = (
+            f"User query (product description): {query}\n\n"
+            f"Context (candidate standards):\n{context}\n\n"
+            "Return a concise answer listing recommended standards by ID and title, "
+            "with a short rationale."
+        )
+
+        response = openai.chat.completions.create(
+            model=LLM_MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+        )
+
+        return response.choices[0].message.content
+
+    def answer(self, query: str):
+        retrieved_chunks, retrieval_latency = self.retriever.retrieve(query, top_k=TOP_K)
+        t0 = time.time()
+        answer_text = self.call_llm(query, retrieved_chunks)
+        llm_latency = time.time() - t0
+        total_latency = retrieval_latency + llm_latency
+
+        # Map retrieved standards into a simple schema for inference.py
+        retrieved_standards = []
+        for c in retrieved_chunks:
+            retrieved_standards.append({
+                "standard_id": c["id"],
+                "title": c["title"],
+                "score": c["score"]
+            })
+
+        return {
+            "answer_text": answer_text,
+            "retrieved_standards": retrieved_standards,
+            "latency_seconds": total_latency
+        }
