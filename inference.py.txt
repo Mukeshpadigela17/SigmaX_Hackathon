@@ -1,0 +1,46 @@
+import json
+import argparse
+import time
+
+from src.rag_pipeline import RAGPipeline
+
+def load_queries(input_path: str):
+    with open(input_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data
+
+def save_results(results, output_path: str):
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", required=True, help="Path to input JSON file")
+    parser.add_argument("--output", required=True, help="Path to output JSON file")
+    args = parser.parse_args()
+
+    data = load_queries(args.input)
+    pipeline = RAGPipeline()
+
+    results = []
+    for item in data:
+        qid = item.get("id")
+        query = item.get("query", "")
+
+        t0 = time.time()
+        output = pipeline.answer(query)
+        total_latency = time.time() - t0
+
+        # Use latency from pipeline if you prefer; here we just use measured latency
+        latency = output.get("latency_seconds", total_latency)
+
+        results.append({
+            "id": qid,
+            "retrieved_standards": output["retrieved_standards"],
+            "latency_seconds": latency
+        })
+
+    save_results(results, args.output)
+
+if __name__ == "__main__":
+    main()
